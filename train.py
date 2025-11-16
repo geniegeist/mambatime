@@ -43,9 +43,9 @@ def main(config: Config):
     else:
         wandb_run = DummyWandb()
 
-    train_df = pl.read_parquet(config.dataset.train.data, memory_map=True)
-    val_df = pl.read_parquet(config.dataset.validation.data, memory_map=True)
-    sample_df = pl.read_parquet(config.dataset.sampling.data, memory_map=True)
+    train_df = pl.read_parquet(config.dataset.train.data, memory_map=True, use_pyarrow=True, low_memory=True)
+    val_df = pl.read_parquet(config.dataset.validation.data, memory_map=True use_pyarrow=True, low_memory=True)
+    sample_df = pl.read_parquet(config.dataset.sampling.data, memory_map=True, use_pyarrow=True, low_memory=True)
 
     with open(config.dataset.train.meta, "r") as f:
         train_meta = yaml.safe_load(f)
@@ -59,8 +59,11 @@ def main(config: Config):
     context_length = 60 // train_meta["time_res"] * 24 * config.context_window_in_days
 
     train_dataset = TileTimeSeriesDataset(train_df, train_meta, context_length)
+    del train_df
     val_dataset = TileTimeSeriesDataset(val_df, validation_meta, context_length)
+    del val_df
     sample_dataset = TileTimeSeriesDataset(sample_df, sample_meta, context_length)
+    del sample_df
 
     def get_train_loader():
         return DataLoader(train_dataset, batch_size=config.batch_size, sampler=InfiniteRandomSampler(train_dataset), num_workers=config.num_workers)

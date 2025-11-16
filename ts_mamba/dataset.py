@@ -29,8 +29,9 @@ class TileTimeSeriesDataset(Dataset):
         )
 
         self.tile_groups = df.partition_by(tile_col, as_dict=True)
-
         self.tile_tensors = {}
+        self.index = []
+
         for tile_id, tile_df in self.tile_groups.items():
             # Sort by time if not already sorted
             tile_df = tile_df.sort(time_col)
@@ -41,18 +42,25 @@ class TileTimeSeriesDataset(Dataset):
             y = torch.from_numpy(tile_df.select(meta["target"]).to_numpy().copy().squeeze()).float()
             t = torch.from_numpy(tile_df.select("__timestamp__").to_numpy().copy().squeeze()).float()
 
+            length = len(tile_df)
+            # Skip tiles with insufficient length
+            min_required = self.context_length + self.horizon
+            if length < min_required:
+                print(f"Skipping tile {tile_id}: only {length} timesteps, "
+                      f"requires >= {min_required}")
+                continue
+
             self.tile_tensors[tile_id] = {
                 "x": x,
                 "y": y,
                 "t": t,
-                "length": len(tile_df),
+                "length": length,
             }
 
-        self.index = []
-        for tile_id, tensors in self.tile_tensors.items():
-            max_start = tensors["length"] - (context_length + self.horizon)
-            assert max_start > 0, f"Tile id {tile_id} has not enough context size"
-            self.index.extend([(tile_id, i) for i in range(max_start)])
+            # Index for shifted sequence forecasting
+            max_start = length - (self.context_length + self.horizon)
+            self.index.extend([(tile_id, i) for i in range(max_start + 1)])
+
 
     def __len__(self):
         return len(self.index)

@@ -161,7 +161,8 @@ def main(config: Config):
 
         loss = criterion(preds, targets)
         loss.backward()
-
+        if config.grad_clip is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
         optimizer.step()
         scheduler.step()
 

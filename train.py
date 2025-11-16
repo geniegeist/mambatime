@@ -43,9 +43,9 @@ def main(config: Config):
     else:
         wandb_run = DummyWandb()
 
-    train_df = pl.read_parquet(config.dataset.train.data)
-    val_df = pl.read_parquet(config.dataset.validation.data)
-    sample_df = pl.read_parquet(config.dataset.sampling.data)
+    train_df = pl.read_parquet(config.dataset.train.data, memory_map=True)
+    val_df = pl.read_parquet(config.dataset.validation.data, memory_map=True)
+    sample_df = pl.read_parquet(config.dataset.sampling.data, memory_map=True)
 
     with open(config.dataset.train.meta, "r") as f:
         train_meta = yaml.safe_load(f)

@@ -76,6 +76,11 @@ def main(config: Config):
         d_model=config.d_model,
         d_intermediate=config.d_intermediate,
         n_layers=config.n_layers,
+        ssm_cfg=config.model.ssm_cfg,
+        attn_layer_idx=config.model.attn_layer_idx,
+        attn_cfg=config.model.attn_cfg,
+        norm_epsilon=config.model.norm_epsilon,
+        rms_norm=config.model.rms_norm,
         device=config.device,
     )
     model = model.to(config.device)
@@ -125,6 +130,7 @@ def main(config: Config):
             wandb_run.log({
                 "samples_so_far": samples_so_far,
                 "val_loss": val_res["loss"],
+                "val_loss_last": val_res["loss_last"],
                 "val_mae": val_res["mae"],
                 "val_zero_mae": val_res["zero_mae"],
                 "val_pos_mae": val_res["pos_mae"],
@@ -200,7 +206,6 @@ def main(config: Config):
                 artifact = wandb.Artifact(f'{wandb_run.id}-artifact-step{step}', type='model')
                 artifact.add_file(ckpt_path)
                 wandb_run.log_artifact(artifact)
-
 
     wandb_run.finish()
 

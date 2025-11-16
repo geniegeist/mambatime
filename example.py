@@ -1,6 +1,6 @@
 import torch
 import torch.backends.cudnn as cudnn
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader
 from torch.optim import AdamW
 import wandb
 import polars as pl
@@ -141,7 +141,7 @@ wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(
 )
 
 # Data
-print(f'==> Preparing data..')
+print('==> Preparing data..')
 
 df = pl.read_parquet(path_to_data)
 train_df, val_df = temporal_train_val_split(df, meta, val_split_date)

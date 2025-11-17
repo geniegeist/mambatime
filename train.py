@@ -1,7 +1,5 @@
 import glob
 import os
-import random
-import threading
 
 import hydra
 import polars as pl
@@ -19,7 +17,7 @@ from config import Config
 from ts_mamba.common import DummyWandb
 from ts_mamba.dataset import TileTimeSeriesDataset
 from ts_mamba.loss_eval import evaluate_model_rmse
-from ts_mamba.model import TimeseriesModel, RMSELoss, WeightedRMSELoss
+from ts_mamba.model import TimeseriesModel, WeightedRMSELoss
 from ts_mamba.optimizer import WarmupCosineLR 
 from ts_mamba.train_util import plot_forecast_vs_truth_rmse
 
@@ -249,7 +247,7 @@ def main(config: Config):
             ckpt_path = f'./checkpoint/ckpt_{config.wandb.name}_step{step}.pth'
             torch.save(state, ckpt_path)
 
-            if not use_wandb:
+            if use_wandb:
                 artifact = wandb.Artifact(f'{wandb_run.id}-artifact-step{step}', type='model')
                 artifact.add_file(ckpt_path)
                 wandb_run.log_artifact(artifact)

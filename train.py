@@ -136,7 +136,7 @@ def main(config: Config):
     optimizer = AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     scheduler = WarmupCosineLR(optimizer, warmup_steps=config.warmup_steps, total_steps=config.total_steps, last_epoch=start_step-1)
 
-    if not use_wandb:
+    if use_wandb:
         wandb_run.watch(model, log="all")
 
     ema_beta = 0.9 # EMA decay factor
@@ -230,7 +230,7 @@ def main(config: Config):
                 "last_lr": scheduler.get_last_lr(),
             })
 
-        if config.save_every >= 0 and step % config.save_every == 0 and step > 0:
+        if config.save_every >= 0 and step % config.save_every == 0:
             print("Save checkpoint")
 
             state = {

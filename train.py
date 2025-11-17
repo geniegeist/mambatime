@@ -1,6 +1,7 @@
 import glob
 import os
 import random
+import threading
 
 import hydra
 import polars as pl
@@ -29,7 +30,7 @@ config_store.store(name="timeseries_deep_learning_config", node=Config)
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="config")
 def main(config: Config):
-    print(config.dataset.sampling)
+    print(config)
 
     use_wandb = config.wandb is not None
     wandb_run = None
@@ -46,10 +47,7 @@ def main(config: Config):
         wandb_run = DummyWandb()
 
 
-
-    val_df = pl.read_parquet(config.dataset.validation.data)
-    sample_df = pl.read_parquet(config.dataset.sampling.data)
-
+    # ---- Load metadata before creating datasets ----
     with open(config.dataset.train.meta, "r") as f:
         train_meta = yaml.safe_load(f)
 
@@ -61,32 +59,46 @@ def main(config: Config):
 
     context_length = 60 // train_meta["time_res"] * 24 * config.context_window_in_days
 
-    print("=> Load data")
 
+    # ---- Train shards setup ----
+    print("=> Load trainining shards")
     train_shards = sorted(glob.glob(config.dataset.train.data))
     shard_index = 0
     train_df = None
     train_dataset = None
     train_loader = None
+    prefetched_df = None
+    prefetch_thread = None
+
+    def _prefetch_next_shard():
+        nonlocal prefetched_df, shard_index
+        shard_path = train_shards[shard_index]
+        print(f"=> Prefetching shard in background: {shard_path}")
+        prefetched_df = pl.read_parquet(shard_path, memory_map=True)
 
     def load_next_shard():
-        nonlocal shard_index, train_df, train_dataset, train_loader
+        nonlocal shard_index, train_df, train_dataset, train_loader, prefetched_df, prefetch_thread
 
+        # Reshuffle shards at start of each cycle
         if shard_index == 0:
             random.shuffle(train_shards)
 
+        # If prefetching occurred — wait & use that data
+        if prefetch_thread is not None:
+            prefetch_thread.join()
+            prefetch_thread = None
+
         shard_path = train_shards[shard_index]
-        shard_index += 1
 
-        if shard_index >= len(train_shards):
-            shard_index = 0  # loop around if needed
+        if prefetched_df is not None:
+            print(f"🔄 Loading prefetched shard: {shard_path}")
+            train_df = prefetched_df
+            prefetched_df = None
+        else:
+            print(f"⚡ Loading shard synchronously: {shard_path}")
+            train_df = pl.read_parquet(shard_path, memory_map=True)
 
-        # Load shard
-        if train_df is not None:
-            del train_df
-        train_df = pl.read_parquet(shard_path, memory_map=True)
-
-        # Rebuild dataset + loader
+        # Build dataset + loader
         train_dataset = TileTimeSeriesDataset(train_df, train_meta, context_length)
         train_loader = DataLoader(
             train_dataset,
@@ -96,21 +108,32 @@ def main(config: Config):
             persistent_workers=True
         )
 
-        print(f"Loaded shard {shard_index}/{len(train_shards)}: {shard_path}")
+        shard_index += 1
+        if shard_index >= len(train_shards):
+            shard_index = 0
+
+        # Begin prefetching next shard
+        prefetch_thread = threading.Thread(target=_prefetch_next_shard)
+        prefetch_thread.start()
+
+        print(f"Loaded shard: {shard_path}")
 
     load_next_shard()
     train_iter = iter(train_loader)
 
-    val_dataset = TileTimeSeriesDataset(val_df, validation_meta, context_length)
-    del val_df
-    sample_dataset = TileTimeSeriesDataset(sample_df, sample_meta, context_length)
-    del sample_df
 
+    # ---- Load validation + sampling datasets fully ----
+    print("=> Load validation and sampling datasets")
+    val_df = pl.read_parquet(config.dataset.validation.data)
+    sample_df = pl.read_parquet(config.dataset.sampling.data)
+    val_dataset = TileTimeSeriesDataset(val_df, validation_meta, context_length)
+    sample_dataset = TileTimeSeriesDataset(sample_df, sample_meta, context_length)
     val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False, num_workers=config.num_workers)
     sample_loader = DataLoader(sample_dataset, batch_size=64, shuffle=False, num_workers=config.num_workers)
+    del val_df, sample_df
+
 
     print('==> Building model..')
-
     d_input = len(train_meta["features"])
     model = TimeseriesModel(
         d_input=d_input,

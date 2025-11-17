@@ -144,6 +144,22 @@ class TimeseriesModel(nn.Module):
             return y_hat  # (B, L, 1)
 
 
+class LastKRMSELoss(nn.Module):
+    def __init__(self, K):
+        super().__init__()
+        self.K = K
+
+    def forward(self, preds, targets):
+        # preds/targets shape: (batch, timesteps, ...)
+        # Slice last K timesteps
+        preds_lastK = preds[:, -self.K:]
+        targets_lastK = targets[:, -self.K:]
+
+        # Compute mean MSE over these last K steps only
+        mse = torch.mean((preds_lastK - targets_lastK) ** 2)
+
+        return torch.sqrt(mse)
+
 class RMSELoss(nn.Module):
     """Root Mean Square Error Loss"""
     def __init__(self):

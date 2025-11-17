@@ -159,19 +159,23 @@ class WeightedRMSELoss(nn.Module):
         self.decay = decay
 
     def forward(self, preds, targets):
-        _, L, _ = preds.shape
+        # preds, targets: (B, L, D)
+        B, L, D = preds.shape
         device = preds.device
 
-        # exponential weights increasing toward the final step
+        # exponential weights (increase toward the final step)
         weights = torch.tensor(
             [self.decay**(L - 1 - i) for i in range(L)],
-            dtype=torch.float32,
-            device=device
+            dtype=torch.float32, device=device
         )
-        weights = weights / weights.sum()  # normalize so loss scale stays stable
+        weights = weights / weights.sum()  # normalize
 
-        mse = (preds - targets) ** 2  # (B, L)
-        mse = mse.mean(dim=0)        # avg over batch -> (L)
-        
-        loss = torch.sqrt((weights * mse).sum())
+        # compute elementwise squared error
+        se = (preds - targets) ** 2  # (B, L, D)
+
+        # apply weights along sequence dimension BEFORE reducing
+        weighted_mse = (se * weights.view(1, L, 1)).mean()  # scalar
+
+        # RMSE
+        loss = torch.sqrt(weighted_mse)
         return loss

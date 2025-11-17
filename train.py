@@ -145,6 +145,8 @@ def main(config: Config):
         attn_cfg=config.model.attn_cfg,
         norm_epsilon=config.model.norm_epsilon,
         rms_norm=config.model.rms_norm,
+        residual_in_fp32=config.model.residual_in_fp32,
+        dtype=torch.bfloat16,
         device=config.device,
     )
     model = model.to(config.device)

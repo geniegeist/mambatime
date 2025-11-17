@@ -81,6 +81,7 @@ class TimeseriesModel(nn.Module):
         attn_cfg=None,
         rms_norm: bool = False,
         norm_epsilon: float = 1e-5,
+        residual_in_fp32: bool = True,
         device=None,
         dtype=None,
     ):
@@ -100,7 +101,7 @@ class TimeseriesModel(nn.Module):
                     attn_cfg=attn_cfg,
                     norm_epsilon=norm_epsilon,
                     rms_norm=rms_norm,
-                    residual_in_fp32=True,
+                    residual_in_fp32=residual_in_fp32,
                     layer_idx=i,
                     **factory_kwargs,
                 )

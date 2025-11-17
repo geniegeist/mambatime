@@ -9,6 +9,7 @@ lit # Getting installation errors with torch 2.0 if this isn't installed
 # torchvision
 torch
 mamba-ssm
+causal_conv1d
 pytorch-lightning==2.0.4
 hydra-core
 omegaconf

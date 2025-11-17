@@ -67,36 +67,12 @@ def main(config: Config):
     train_df = None
     train_dataset = None
     train_loader = None
-    prefetched_df = None
-    prefetch_thread = None
-
-    def _prefetch_next_shard():
-        nonlocal prefetched_df, shard_index
-        shard_path = train_shards[shard_index]
-        print(f"=> Prefetching shard in background: {shard_path}")
-        prefetched_df = pl.read_parquet(shard_path, memory_map=True)
 
     def load_next_shard():
-        nonlocal shard_index, train_df, train_dataset, train_loader, prefetched_df, prefetch_thread
-
-        # Reshuffle shards at start of each cycle
-        if shard_index == 0:
-            random.shuffle(train_shards)
-
-        # If prefetching occurred — wait & use that data
-        if prefetch_thread is not None:
-            prefetch_thread.join()
-            prefetch_thread = None
+        nonlocal shard_index, train_df, train_dataset, train_loader
 
         shard_path = train_shards[shard_index]
-
-        if prefetched_df is not None:
-            print(f"🔄 Loading prefetched shard: {shard_path}")
-            train_df = prefetched_df
-            prefetched_df = None
-        else:
-            print(f"⚡ Loading shard synchronously: {shard_path}")
-            train_df = pl.read_parquet(shard_path, memory_map=True)
+        train_df = pl.read_parquet(shard_path, memory_map=True)
 
         # Build dataset + loader
         train_dataset = TileTimeSeriesDataset(train_df, train_meta, context_length)
@@ -111,10 +87,6 @@ def main(config: Config):
         shard_index += 1
         if shard_index >= len(train_shards):
             shard_index = 0
-
-        # Begin prefetching next shard
-        prefetch_thread = threading.Thread(target=_prefetch_next_shard)
-        prefetch_thread.start()
 
         print(f"Loaded shard: {shard_path}")
 

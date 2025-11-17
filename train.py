@@ -259,7 +259,7 @@ def main(config: Config):
                 "last_lr": scheduler.get_last_lr(),
             })
 
-        if config.save_every >= 0 and step % config.save_every == 0:
+        if config.save_every >= 0 and step % config.save_every == 0 and step > 0:
             print("Save checkpoint")
 
             state = {
@@ -273,7 +273,7 @@ def main(config: Config):
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
-            ckpt_path = f'./checkpoint/ckpt_{config.run}_step{step}.pth'
+            ckpt_path = f'./checkpoint/ckpt_{config.wandb.name}_step{step}.pth'
             torch.save(state, ckpt_path)
 
             if not use_wandb:

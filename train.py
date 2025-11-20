@@ -21,7 +21,7 @@ from ts_mamba.llm import MambaLMHeadModel
 from ts_mamba.loss_eval import evaluate_model_rmse, evaluate_llm
 from ts_mamba.model import TimeseriesModel, WeightedRMSELoss
 from ts_mamba.optimizer import WarmupCosineLR 
-from ts_mamba.train_util import plot_forecast_vs_truth_rmse, plot_llm
+from ts_mamba.train_util import plot_forecast_vs_truth_rmse, plot_llm, plot_llm2
 
 
 config_store = ConfigStore.instance()
@@ -266,7 +266,7 @@ def main(config: Config):
                     epoch=step,
                 )
             elif config.loss == 'cross_entropy':
-                plot_llm(
+                plot_llm2(
                     model=model,
                     loader=sample_loader,
                     device=config.device,

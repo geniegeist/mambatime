@@ -280,7 +280,7 @@ def main(config: Config):
         obs, targets = batch["context"], batch["target"]
         if config.loss == 'cross_entropy':
             obs, targets = obs.squeeze(-1), targets.squeeze(-1)
-            targets = targets[:, -config.train.num_last_tokens:]
+            targets = targets[:, -config.train.num_last_tokens:].reshape(-1)
         obs, targets = obs.to(config.device), targets.to(config.device)
 
         optimizer.zero_grad()
@@ -289,7 +289,7 @@ def main(config: Config):
             preds = model(obs)
         elif config.model.model == "llm":
             preds = model(obs, num_last_tokens=config.train.num_last_tokens)
-            preds = preds.logits
+            preds = preds.logits.reshape(-1, preds.logits.size(-1))
             print(preds.shape)
 
         loss = criterion(preds, targets)

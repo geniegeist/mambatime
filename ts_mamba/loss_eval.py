@@ -4,13 +4,69 @@ from tqdm.auto import tqdm
 from ts_mamba.model import RMSELoss
 
 def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
+    eval_loss = 0.0
+    
+    # accumulators for metrics
+    squared_err_sum = 0.0
+    abs_err_sum = 0.0
+    total_count = 0
+
+    with torch.no_grad():
+        pbar = tqdm(enumerate(loader), total=len(loader))
+        for batch_idx, data in pbar:
+            obs, targets = data["context"], data["target"]
+            obs = obs.squeeze(-1).to(device)
+            targets = targets[:, -1].reshape(-1).to(device)  # (batch,)
+
+            logits = model(obs, num_last_tokens=1).logits     # (batch,1,vocab)
+            logits = logits.squeeze(1)                        # (batch,vocab)
+
+            # ----- LOSS -----
+            loss = criterion(logits, targets)
+            eval_loss += loss.item()
+
+            # ----- EXPECTED VALUE -----
+            probs = torch.softmax(logits, dim=-1)             # (batch,vocab)
+            vocab_size = probs.size(-1)
+            class_vals = torch.arange(vocab_size, device=device, dtype=probs.dtype)
+            expected = (probs * class_vals).sum(dim=-1)       # (batch,)
+
+            # ----- ONLINE RMSE + MAE -----
+            err = expected - targets
+            squared_err_sum += torch.sum(err ** 2).item()
+            abs_err_sum += torch.sum(torch.abs(err)).item()
+            total_count += targets.numel()
+
+            # Current metrics
+            curr_rmse = (squared_err_sum / total_count) ** 0.5
+            curr_mae = abs_err_sum / total_count
+
+            pbar.set_description(
+                f"Val ({batch_idx+1}/{len(loader)}) | "
+                f"Loss: {eval_loss/(batch_idx+1):.3f} | "
+                f"RMSE: {curr_rmse:.3f} | "
+                f"MAE: {curr_mae:.3f}"
+            )
+
+    # Final metrics
+    avg_loss = eval_loss / len(loader)
+    final_rmse = (squared_err_sum / total_count) ** 0.5
+    final_mae = abs_err_sum / total_count
+
+    return {
+        "loss": avg_loss,
+        "rmse": final_rmse,
+        "mae": final_mae,
+    }
+
+def evaluate_llm2(model, criterion, loader, device) -> dict[str, float]:
     eval_loss = 0
     with torch.no_grad():
         pbar = tqdm(enumerate(loader))
         for batch_idx, data in pbar:
             obs, targets = data["context"], data["target"]
             obs, targets = obs.squeeze(-1).to(device), targets[:,-1].reshape(-1).to(device)
-            logits = model(obs, num_last_tokens=1).logits
+            logits = model(obs, num_last_tokens=1).logits # (batch, 1, vocab_size)
             loss = criterion(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
 
             eval_loss += loss.item()

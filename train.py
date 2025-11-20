@@ -248,6 +248,8 @@ def main(config: Config):
                 wandb_run.log({
                     "samples_so_far": samples_so_far,
                     "val_loss": val_res["loss"],
+                    "val_mae": val_res["mae"],
+                    "val_rmse": val_res["rmse"],
                     "min_val_loss": min_eval_loss,
                     "best_step": best_step,
                 })

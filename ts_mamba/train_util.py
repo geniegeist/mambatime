@@ -125,8 +125,93 @@ def plot_forecast_vs_truth_rmse(model, loader, device, wandb_run, epoch):
             wandb_run.log({log_key: wandb.Image(plt)})
             plt.close()
 
-
 def plot_llm(model, loader, device, wandb_run, epoch):
+    preds_top1, preds_top2, preds_top3 = [], [], []
+    probs_top1, probs_top2, probs_top3 = [], [], []
+
+    tile_ids, ts, truths = [], [], []
+
+    with torch.no_grad():
+        for data in tqdm(loader, total=len(loader), leave=False, desc="Sample Batch index"):
+            obs, targets, tile_id, target_timestamp = (
+                data["context"], data["target"], data["tile_id"], data["target_timestamp"]
+            )
+            obs = obs.squeeze(-1).to(device)
+            logits = model(obs, num_last_tokens=1).logits.squeeze(1)   # (batch, vocab)
+            probs = torch.softmax(logits, dim=-1)
+
+            # ---- TOP-3 ----
+            top3_vals, top3_idx = torch.topk(probs, k=3, dim=-1)  # (batch,3)
+
+            t = target_timestamp[:, -1]
+
+            truths.append(targets[:, -1])
+            preds_top1.append(top3_idx[:, 0].cpu())
+            preds_top2.append(top3_idx[:, 1].cpu())
+            preds_top3.append(top3_idx[:, 2].cpu())
+
+            probs_top1.append(top3_vals[:, 0].cpu())
+            probs_top2.append(top3_vals[:, 1].cpu())
+            probs_top3.append(top3_vals[:, 2].cpu())
+
+            tile_ids.extend(tile_id[0])
+            ts.append(t)
+
+    # ---- concatenate ----
+    df = pl.DataFrame({
+        "tile_id": tile_ids,
+        "reference_time": torch.cat(ts).cpu(),
+        "truth": torch.cat(truths).cpu(),
+        "top1": torch.cat(preds_top1).cpu(),
+        "top2": torch.cat(preds_top2).cpu(),
+        "top3": torch.cat(preds_top3).cpu(),
+        "p1": torch.cat(probs_top1).cpu(),
+        "p2": torch.cat(probs_top2).cpu(),
+        "p3": torch.cat(probs_top3).cpu(),
+    }).with_columns([
+        pl.col("reference_time").cast(pl.Datetime).alias("reference_time"),
+    ]).with_columns([
+        pl.col("reference_time")
+        .dt.replace_time_zone("UTC")
+        .dt.convert_time_zone("America/Regina")
+        .alias("reference_time_local")
+    ]).with_columns([
+        pl.col("reference_time_local").dt.date().alias("date_local")
+    ])
+
+    # ---- Plot each tile × day ----
+    for tile_group, tile_df in df.group_by("tile_id"):
+        tile_id = tile_group[0]
+
+        for day_group, day_df in tile_df.group_by("date_local"):
+            day = day_group[0]
+
+            day_pd = day_df.sort("reference_time_local").to_pandas()
+
+            plt.figure(figsize=(10, 6))
+            plt.plot(day_pd["reference_time_local"], day_pd["truth"], label="Truth", marker="o")
+
+            # plot top-3 predictions with their probabilities
+            plt.scatter(day_pd["reference_time_local"], day_pd["top1"],
+                        s=80 * day_pd["p1"], label="Top-1", marker="x")
+            plt.scatter(day_pd["reference_time_local"], day_pd["top2"],
+                        s=80 * day_pd["p2"], label="Top-2", marker="^")
+            plt.scatter(day_pd["reference_time_local"], day_pd["top3"],
+                        s=80 * day_pd["p3"], label="Top-3", marker="s")
+
+            plt.title(f"Tile {tile_id} — {day} (America/Regina)")
+            plt.xlabel("Local Reference Time")
+            plt.ylabel("Class / Count")
+
+            plt.legend()
+            plt.tight_layout()
+
+            wandb_run.log({
+                f"plots/epoch{epoch}/{tile_id}/day_{day.isoformat()}": wandb.Image(plt)
+            })
+            plt.close()
+
+def plot_llm2(model, loader, device, wandb_run, epoch):
     preds, tile_ids, ts = [], [], []
     truths = []
     with torch.no_grad():

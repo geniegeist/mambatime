@@ -129,87 +129,134 @@ def plot_llm(model, loader, device, wandb_run, epoch):
     preds_top1, preds_top2, preds_top3 = [], [], []
     probs_top1, probs_top2, probs_top3 = [], [], []
 
-    tile_ids, ts, truths = [], [], []
+    tile_ids = []
+    ts = []
+    truths = []
 
     with torch.no_grad():
         for data in tqdm(loader, total=len(loader), leave=False, desc="Sample Batch index"):
             obs, targets, tile_id, target_timestamp = (
-                data["context"], data["target"], data["tile_id"], data["target_timestamp"]
+                data["context"],
+                data["target"],
+                data["tile_id"],
+                data["target_timestamp"]
             )
+
             obs = obs.squeeze(-1).to(device)
-            logits = model(obs, num_last_tokens=1).logits.squeeze(1)   # (batch, vocab)
+            logits = model(obs, num_last_tokens=1).logits.squeeze(1)  # (batch, vocab)
             probs = torch.softmax(logits, dim=-1)
 
-            # ---- TOP-3 ----
-            top3_vals, top3_idx = torch.topk(probs, k=3, dim=-1)  # (batch,3)
+            # --- TOP-3 ---
+            top3_vals, top3_idx = torch.topk(probs, k=3, dim=-1)
 
-            t = target_timestamp[:, -1]
+            # Extract final timestamp + target for each sample in the batch
+            t = target_timestamp[:, -1].cpu().long()   # (batch,)
+            y = targets[:, -1].cpu().long()            # (batch,)
 
-            truths.append(targets[:, -1].cpu().long())
+            truths.append(y)
+            ts.append(t)
+
             preds_top1.append(top3_idx[:, 0].cpu().long())
             preds_top2.append(top3_idx[:, 1].cpu().long())
             preds_top3.append(top3_idx[:, 2].cpu().long())
 
-            # convert probabilities to float32 for polars
             probs_top1.append(top3_vals[:, 0].cpu().float())
             probs_top2.append(top3_vals[:, 1].cpu().float())
             probs_top3.append(top3_vals[:, 2].cpu().float())
 
-            tile_ids.extend(tile_id[0])
-            ts.append(t.cpu().long())
+            # tile_id is usually shaped (batch,1). Flatten it.
+            tile_ids.extend(tile_id.squeeze(1).cpu().tolist())
 
-    # ---- concatenate ----
+    # --- FLATTEN EVERYTHING ---
+    flat_ts        = torch.cat(ts).numpy()
+    flat_truths    = torch.cat(truths).numpy()
+    flat_top1      = torch.cat(preds_top1).numpy()
+    flat_top2      = torch.cat(preds_top2).numpy()
+    flat_top3      = torch.cat(preds_top3).numpy()
+    flat_p1        = torch.cat(probs_top1).numpy().astype(float)
+    flat_p2        = torch.cat(probs_top2).numpy().astype(float)
+    flat_p3        = torch.cat(probs_top3).numpy().astype(float)
+
+    # --- BUILD POLARS DF ---
     df = pl.DataFrame({
         "tile_id": tile_ids,
-        "reference_time": torch.cat(ts).numpy(),          # int64 timestamps
-        "truth": torch.cat(truths).numpy(),               # int64
-        "top1": torch.cat(preds_top1).numpy(),            # int64
-        "top2": torch.cat(preds_top2).numpy(),            # int64
-        "top3": torch.cat(preds_top3).numpy(),            # int64
-        "p1": torch.cat(probs_top1).numpy().astype(float),# float32
-        "p2": torch.cat(probs_top2).numpy().astype(float),
-        "p3": torch.cat(probs_top3).numpy().astype(float),
-    }).with_columns([
-        pl.col("reference_time").cast(pl.Datetime).alias("reference_time"),
-    ]).with_columns([
-        pl.col("reference_time")
-        .dt.replace_time_zone("UTC")
-        .dt.convert_time_zone("America/Regina")
-        .alias("reference_time_local")
-    ]).with_columns([
-        pl.col("reference_time_local").dt.date().alias("date_local")
-    ])
+        "reference_time": flat_ts,   # epoch timestamps
+        "truth": flat_truths,
+        "top1": flat_top1,
+        "top2": flat_top2,
+        "top3": flat_top3,
+        "p1": flat_p1,
+        "p2": flat_p2,
+        "p3": flat_p3,
+    })
 
-    # ---- Plot each tile × day ----
-    for tile_group, tile_df in df.group_by("tile_id"):
-        tile_id = tile_group[0]
+    # Convert timestamps
+    df = (
+        df.with_columns(
+            pl.col("reference_time").cast(pl.Datetime).alias("reference_time")
+        )
+        .with_columns(
+            pl.col("reference_time")
+            .dt.replace_time_zone("UTC")
+            .dt.convert_time_zone("America/Regina")
+            .alias("reference_time_local")
+        )
+        .with_columns(
+            pl.col("reference_time_local").dt.date().alias("date_local")
+        )
+    )
 
-        for day_group, day_df in tile_df.group_by("date_local"):
-            day = day_group[0]
+    # --- PLOT FOR EACH TILE × DAY ---
+    for tile_id, tile_df in df.group_by("tile_id"):
+        for date_val, day_df in tile_df.group_by("date_local"):
 
+            # Convert Polars → Pandas for plotting
             day_pd = day_df.sort("reference_time_local").to_pandas()
 
             plt.figure(figsize=(10, 6))
-            plt.plot(day_pd["reference_time_local"], day_pd["truth"], label="Truth", marker="o")
 
-            # plot top-3 predictions with their probabilities
-            plt.scatter(day_pd["reference_time_local"], day_pd["top1"],
-                        s=80 * day_pd["p1"], label="Top-1", marker="x")
-            plt.scatter(day_pd["reference_time_local"], day_pd["top2"],
-                        s=80 * day_pd["p2"], label="Top-2", marker="^")
-            plt.scatter(day_pd["reference_time_local"], day_pd["top3"],
-                        s=80 * day_pd["p3"], label="Top-3", marker="s")
+            # TRUTH LINE
+            plt.plot(
+                day_pd["reference_time_local"],
+                day_pd["truth"],
+                label="Truth",
+                marker="o"
+            )
 
-            plt.title(f"Tile {tile_id} — {day} (America/Regina)")
+            # TOP-3 PREDICTIONS
+            plt.scatter(
+                day_pd["reference_time_local"],
+                day_pd["top1"],
+                s=80 * day_pd["p1"],
+                marker="x",
+                label="Top-1"
+            )
+            plt.scatter(
+                day_pd["reference_time_local"],
+                day_pd["top2"],
+                s=80 * day_pd["p2"],
+                marker="^",
+                label="Top-2"
+            )
+            plt.scatter(
+                day_pd["reference_time_local"],
+                day_pd["top3"],
+                s=80 * day_pd["p3"],
+                marker="s",
+                label="Top-3"
+            )
+
+            plt.title(f"Tile {tile_id} — {date_val} (America/Regina)")
             plt.xlabel("Local Reference Time")
             plt.ylabel("Class / Count")
-
             plt.legend()
             plt.tight_layout()
 
             wandb_run.log({
-                f"plots/epoch{epoch}/{tile_id}/day_{day.isoformat()}": wandb.Image(plt)
+                f"plots/epoch{epoch}/{tile_id}/day_{date_val.isoformat()}":
+                    wandb.Image(plt)
             })
+
             plt.close()
 
 def plot_llm2(model, loader, device, wandb_run, epoch):

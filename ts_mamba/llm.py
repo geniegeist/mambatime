@@ -112,7 +112,6 @@ class MixerModel(nn.Module):
 
     def __init__(
         self,
-        d_input: int,
         d_model: int,
         d_intermediate: int,
         vocab_size: int,

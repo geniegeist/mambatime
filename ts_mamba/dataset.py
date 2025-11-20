@@ -41,7 +41,7 @@ class TileTimeSeriesDataset(Dataset):
                 x = torch.from_numpy(tile_df.select(meta["features"]).to_numpy()).float()
                 y = torch.from_numpy(tile_df.select(meta["target"]).to_numpy().copy().squeeze()).float()
             else:
-                x = torch.from_numpy(tile_df.select(meta["target"]).to_numpy()).long()
+                x = torch.from_numpy(tile_df.select(meta["target"]).to_numpy().copy()).long()
                 y = torch.from_numpy(tile_df.select(meta["target"]).to_numpy().copy().squeeze()).long()
             # Copy these two tensors to suppress warning of non-writeable tensors
             t = torch.from_numpy(tile_df.select("__timestamp__").to_numpy().copy().squeeze()).float()

@@ -18,7 +18,7 @@ from mamba_ssm.utils.hf import load_config_hf, load_state_dict_hf
 
 
 try:
-    from mamba_ssm.ops.triton.layer_norm import RMSNorm
+    from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 

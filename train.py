@@ -61,7 +61,7 @@ def main(config: Config):
 
 
     # ---- Train shards setup ----
-    print("=> Load trainining shards")
+    print("=> Load training shards")
     train_shards = sorted(glob.glob(config.dataset.train.data))
     shard_index = 0
     train_df = None

@@ -126,7 +126,7 @@ def plot_forecast_vs_truth_rmse(model, loader, device, wandb_run, epoch):
             wandb_run.log({log_key: wandb.Image(plt)})
             plt.close()
 
-def plot_llm2(model, loader, device, wandb_run, epoch):
+def plot_llm(model, loader, device, wandb_run, epoch):
     preds, tile_ids, ts = [], [], []
     truths = []
     with torch.no_grad():
@@ -187,10 +187,9 @@ def plot_llm2(model, loader, device, wandb_run, epoch):
 
 
 
-def plot_llm(model, loader, device, wandb_run, epoch):
-    # Initialize lists for new metrics
-    preds_top3 = [] # To store top 3 tokens
-    expectations = [] # To store expected value
+def plot_llm2(model, loader, device, wandb_run, epoch):
+    preds_top3 = [] 
+    expectations = [] 
     tile_ids, ts = [], []
     truths = []
 
@@ -203,45 +202,36 @@ def plot_llm(model, loader, device, wandb_run, epoch):
             # Get Logits
             logits = model(obs, num_last_tokens=1).logits.squeeze(1) # (batch, vocab)
             
-            # --- CALCULATIONS START ---
-            
             # 1. Convert logits to probabilities
             probs = F.softmax(logits, dim=-1) # (batch, vocab)
             
             # 2. Calculate Expectation: Sum(Value * Probability)
-            # Create a tensor of token values [0, 1, 2, ... vocab_size]
             vocab_values = torch.arange(logits.shape[-1], device=device).float()
             expected_value = torch.sum(probs * vocab_values, dim=-1) # (batch, )
             
             # 3. Get Top 3 Tokens
-            # topk returns values (probs) and indices (tokens). We only need indices here.
             _, top3_indices = torch.topk(probs, k=3, dim=-1) # (batch, 3)
-
-            # --- CALCULATIONS END ---
 
             t = target_timestamp[:,-1]
             truths.append(targets[:,-1])
             
-            # Store results
             preds_top3.append(top3_indices.cpu())
             expectations.append(expected_value.cpu())
             tile_ids.extend(tile_id[0])
             ts.append(t)
 
-    # Concatenate all batches
     cat_targets = torch.cat(truths, dim=0)
-    cat_preds_top3 = torch.cat(preds_top3, dim=0) # (Total_Samples, 3)
+    cat_preds_top3 = torch.cat(preds_top3, dim=0) 
     cat_expectations = torch.cat(expectations, dim=0)
     cat_ts = torch.cat(ts, dim=0)
 
     records = []
-    # Zip through data to create rows. Note: rank1 is index 0, rank2 is index 1, etc.
     for (truth, top3, exp, t, tile) in zip(cat_targets, cat_preds_top3, cat_expectations, cat_ts, tile_ids):
         records.append([
             tile, 
             t, 
             truth.item(), 
-            top3[0].item(), # Top 1 (Argmax)
+            top3[0].item(), # Top 1
             top3[1].item(), # Top 2
             top3[2].item(), # Top 3
             exp.item()      # Expectation
@@ -273,16 +263,17 @@ def plot_llm(model, loader, device, wandb_run, epoch):
 
             plt.figure(figsize=(10, 6))
             
-            # 1. Plot Truth
+            # 1. Plot Truth (Continuous)
             plt.plot(day_pd["reference_time_local"], day_pd["count"], label="Truth", marker="o", color="black", linewidth=1.5, zorder=10)
             
-            # 2. Plot Expectation (Usually a smooth line)
+            # 2. Plot Expectation (Continuous dashed)
             plt.plot(day_pd["reference_time_local"], day_pd["expectation"], label="Expectation", linestyle="--", color="darkorange", linewidth=2)
 
-            # 3. Plot Top 1 (The original 'mu')
-            plt.scatter(day_pd["reference_time_local"], day_pd["top1"], label="Top 1", marker="x", color="blue", s=40, alpha=1.0)
+            # 3. Plot Top 1 (Continuous solid line)
+            # Changed from scatter to plot to connect the points
+            plt.plot(day_pd["reference_time_local"], day_pd["top1"], label="Top 1", linestyle="-", marker="x", color="blue", linewidth=1.5)
             
-            # 4. Plot Top 2 and Top 3 (With lower opacity/different markers)
+            # 4. Plot Top 2 and Top 3 (Keep as scatter)
             plt.scatter(day_pd["reference_time_local"], day_pd["top2"], label="Top 2", marker="1", color="tab:blue", s=30, alpha=0.6)
             plt.scatter(day_pd["reference_time_local"], day_pd["top3"], label="Top 3", marker="2", color="tab:blue", s=30, alpha=0.4)
 

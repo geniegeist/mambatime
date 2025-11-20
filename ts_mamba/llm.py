@@ -129,8 +129,20 @@ class MixerModel(nn.Module):
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
+        self.residual_in_fp32 = residual_in_fp32
 
         self.embedding = nn.Embedding(vocab_size, d_model, **factory_kwargs)
+
+        
+        # We change the order of residual and layer norm:
+        # Instead of LN -> Attn / MLP -> Add, we do:
+        # Add -> LN -> Attn / MLP / Mixer, returning both the residual branch (output of Add) and
+        # the main branch (output of MLP / Mixer). The model definition is unchanged.
+        # This is for performance reason: we can fuse add + layer_norm.
+        self.fused_add_norm = fused_add_norm
+        if self.fused_add_norm:
+            if layer_norm_fn is None or rms_norm_fn is None:
+                raise ImportError("Failed to import Triton LayerNorm / RMSNorm kernels")
 
         self.layers = nn.ModuleList(
             [

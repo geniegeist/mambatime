@@ -166,6 +166,16 @@ def plot_llm(model, loader, device, wandb_run, epoch):
 
             # tile_id is usually shaped (batch,1). Flatten it.
             tile_ids.extend(tile_id.squeeze(1).cpu().tolist())
+            # tile_id: sometimes list, sometimes tensor — handle both
+            if isinstance(tile_id, torch.Tensor):
+                # (batch, 1) or (batch,) → flatten
+                tile_ids.extend(tile_id.squeeze().cpu().tolist())
+            elif isinstance(tile_id, list):
+                # Already a Python list of ints
+                tile_ids.extend(tile_id)
+            else:
+                raise TypeError(f"Unexpected tile_id type: {type(tile_id)}")
+
 
     # --- FLATTEN EVERYTHING ---
     flat_ts        = torch.cat(ts).numpy()

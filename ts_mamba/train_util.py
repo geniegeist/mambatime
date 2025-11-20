@@ -164,8 +164,6 @@ def plot_llm(model, loader, device, wandb_run, epoch):
             probs_top2.append(top3_vals[:, 1].cpu().float())
             probs_top3.append(top3_vals[:, 2].cpu().float())
 
-            # tile_id is usually shaped (batch,1). Flatten it.
-            tile_ids.extend(tile_id.squeeze(1).cpu().tolist())
             # tile_id: sometimes list, sometimes tensor — handle both
             if isinstance(tile_id, torch.Tensor):
                 # (batch, 1) or (batch,) → flatten

@@ -288,6 +288,7 @@ def main(config: Config):
             preds = model(obs)
         elif config.model.model == "llm":
             preds = model(obs, num_last_tokens=config.train.num_last_tokens)
+            preds = preds.logits
 
         loss = criterion(preds, targets)
         loss.backward()

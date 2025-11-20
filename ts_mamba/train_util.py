@@ -132,6 +132,7 @@ def plot_llm(model, loader, device, wandb_run, epoch):
     with torch.no_grad():
         for data in tqdm(loader, total=len(loader), leave=False, desc="Sample Batch index"):
             obs, targets, tile_id, target_timestamp = data["context"], data["target"], data["tile_id"], data["target_timestamp"]
+            obs = obs.logits
             obs = obs.squeeze(-1).to(device)
             logits = model(obs, num_last_tokens=1).squeeze(1) # (batch, vocab)
             _, most_probable_token = torch.max(logits, dim=-1) # (batch, )

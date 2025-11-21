@@ -36,9 +36,9 @@ def main(config: Config):
     print(config)
 
     if "RANK" in os.environ:
-        dist.init_process_group("nccl")
         local_rank = int(os.environ["LOCAL_RANK"])
-        torch.cuda.set_device(local_rank)
+        torch.cuda.set_device(local_rank)  # select GPU first
+        dist.init_process_group(backend="nccl")  # then init PG
     else:
         local_rank = 0
 

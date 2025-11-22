@@ -23,6 +23,19 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
     interval_count = 0
     interval_width_sum = 0.0
 
+    # Define helper functions outside the loop or inline efficiently
+    def percentile_from_cdf(cdf, p):
+        # cdf: (batch, vocab)
+        # p_tensor: must be (batch, 1) for row-wise searchsorted
+        p_tensor = torch.full((cdf.size(0), 1), p, device=cdf.device)
+        
+        # Returns (batch, 1), so we squeeze to get (batch,)
+        indices = torch.searchsorted(cdf, p_tensor, right=True)
+        return indices.squeeze(-1).float()
+
+    def pinball(y, q, tau):
+        return torch.maximum(tau * (y - q), (1 - tau) * (q - y))
+
     with torch.no_grad():
         pbar = tqdm(enumerate(loader), total=len(loader))
         for batch_idx, data in pbar:
@@ -32,7 +45,7 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
 
             # model forward
             logits = model(obs, num_last_tokens=1).logits  # (batch,1,vocab)
-            logits = logits.squeeze(1)                    # (batch,vocab)
+            logits = logits.squeeze(1)                     # (batch,vocab)
 
             # ===== 1. Cross Entropy Loss =====
             loss = criterion(logits, targets)
@@ -52,7 +65,7 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
             total_count += targets.numel()
 
             # =========================================================
-            #                    DISTRIBUTIONAL METRICS
+            #                     DISTRIBUTIONAL METRICS
             # =========================================================
 
             # ===== A. CRPS for discrete distributions =====
@@ -64,19 +77,12 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
             crps_sum += crps.sum().item()
 
             # ===== B. Quantile extraction using searchsorted =====
-            def percentile_from_cdf(cdf, p):
-                # cdf: (batch, vocab), monotonic
-                p_tensor = torch.full((cdf.size(0),), p, device=cdf.device)
-                return torch.searchsorted(cdf, p_tensor, right=True).float()
-
+            # Now using the corrected logic (input shape [Batch, 1])
             q10 = percentile_from_cdf(cdf_pred, 0.10)
             q50 = percentile_from_cdf(cdf_pred, 0.50)
             q90 = percentile_from_cdf(cdf_pred, 0.90)
 
             # ===== C. Pinball loss =====
-            def pinball(y, q, tau):
-                return torch.maximum(tau * (y - q), (1 - tau) * (q - y))
-
             pinball_10 += pinball(targets, q10, 0.10).sum().item()
             pinball_50 += pinball(targets, q50, 0.50).sum().item()
             pinball_90 += pinball(targets, q90, 0.90).sum().item()

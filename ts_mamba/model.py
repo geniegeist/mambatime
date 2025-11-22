@@ -174,7 +174,7 @@ class MAELoss(nn.Module):
         super().__init__()
         self.loss = torch.nn.L1Loss()
 
-    def forwward(self, preds, targets):
+    def forward(self, preds, targets):
         return self.loss(preds[-self.k:], targets[-self.k:])
 
 class WeightedRMSELoss(nn.Module):

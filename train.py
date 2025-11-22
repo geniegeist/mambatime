@@ -263,7 +263,7 @@ def main(config: Config):
         # once in a while: evaluate model
         if (last_step or (step % config.eval_every == 0 and not (step == 0 and not config.validate_at_start))):
             if is_main:
-                if config.loss == 'rmse':
+                if config.loss == 'rmse' or config.loss == 'mae':
                     val_res = evaluate_model_rmse(
                         model=model.module if isinstance(model, DDP) else model,
                         criterion=criterion,

@@ -7,17 +7,19 @@ from ts_mamba.model import RMSELoss
 def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
     eval_loss = 0.0
     
-    # accumulators for point metrics
+    # ---------- POINT METRIC ACCUMULATORS ----------
     squared_err_sum = 0.0
     abs_err_sum = 0.0
     total_count = 0
     
-    # --- DISTRIBUTIONAL METRIC ACCUMULATORS ---
+    # ---------- DISTRIBUTIONAL METRIC ACCUMULATORS ----------
     crps_sum = 0.0
+
     pinball_10 = 0.0
     pinball_50 = 0.0
     pinball_90 = 0.0
-    coverage_50_90_hits = 0
+
+    coverage_hits = 0
     interval_count = 0
     interval_width_sum = 0.0
 
@@ -28,49 +30,50 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
             obs = obs.squeeze(-1).to(device)
             targets = targets[:, -1].reshape(-1).to(device)  # (batch,)
 
-            logits = model(obs, num_last_tokens=1).logits     # (batch,1,vocab)
-            logits = logits.squeeze(1)                        # (batch,vocab)
+            # model forward
+            logits = model(obs, num_last_tokens=1).logits  # (batch,1,vocab)
+            logits = logits.squeeze(1)                    # (batch,vocab)
 
-            # ----- LOSS -----
+            # ===== 1. Cross Entropy Loss =====
             loss = criterion(logits, targets)
             eval_loss += loss.item()
 
-            # ----- PROBABILITIES -----
-            probs = torch.softmax(logits, dim=-1)             # (batch,vocab)
+            # ===== 2. Probability distribution =====
+            probs = torch.softmax(logits, dim=-1)         # (batch,vocab)
             vocab_size = probs.size(-1)
-
-            # ----- EXPECTED VALUE -----
             class_vals = torch.arange(vocab_size, device=device, dtype=probs.dtype)
-            expected = (probs * class_vals).sum(dim=-1)       # (batch,)
 
-            # ----- POINT ERRORS (RMSE, MAE) -----
+            # ===== 3. Expected value for RMSE/MAE =====
+            expected = (probs * class_vals).sum(dim=-1)   # (batch,)
             err = expected - targets
+
             squared_err_sum += torch.sum(err ** 2).item()
             abs_err_sum += torch.sum(torch.abs(err)).item()
             total_count += targets.numel()
 
-            # ------------------------------------------------------------------
-            #                      DISTRIBUTIONAL METRICS
-            # ------------------------------------------------------------------
+            # =========================================================
+            #                    DISTRIBUTIONAL METRICS
+            # =========================================================
 
-            # ==== 1. Discrete CRPS ====
+            # ===== A. CRPS for discrete distributions =====
             # CRPS = sum_k (CDF_pred[k] - 1{y <= k})^2
-            cdf_pred = torch.cumsum(probs, dim=-1)  # (batch,vocab)
-            y_expanded = targets.unsqueeze(-1)      # (batch,1)
-            indicator = (class_vals.unsqueeze(0) >= y_expanded).float()  # (batch,vocab)
-            crps = torch.sum((cdf_pred - indicator)**2, dim=-1)          # (batch,)
+            cdf_pred = torch.cumsum(probs, dim=-1)        # (batch,vocab)
+            y_expanded = targets.unsqueeze(-1)            # (batch,1)
+            indicator = (class_vals.unsqueeze(0) >= y_expanded).float()
+            crps = torch.sum((cdf_pred - indicator)**2, dim=-1)
             crps_sum += crps.sum().item()
 
-            # ==== 2. Quantiles (10th, 50th, 90th) ====
-            # Discrete quantiles using CDF crossing
+            # ===== B. Quantile extraction using searchsorted =====
             def percentile_from_cdf(cdf, p):
-                return torch.argmax(cdf >= p, dim=-1).float()
+                # cdf: (batch, vocab), monotonic
+                p_tensor = torch.full((cdf.size(0),), p, device=cdf.device)
+                return torch.searchsorted(cdf, p_tensor, right=True).float()
 
             q10 = percentile_from_cdf(cdf_pred, 0.10)
             q50 = percentile_from_cdf(cdf_pred, 0.50)
             q90 = percentile_from_cdf(cdf_pred, 0.90)
 
-            # ==== 3. Pinball Loss for each quantile ====
+            # ===== C. Pinball loss =====
             def pinball(y, q, tau):
                 return torch.maximum(tau * (y - q), (1 - tau) * (q - y))
 
@@ -78,48 +81,50 @@ def evaluate_llm(model, criterion, loader, device) -> dict[str, float]:
             pinball_50 += pinball(targets, q50, 0.50).sum().item()
             pinball_90 += pinball(targets, q90, 0.90).sum().item()
 
-            # ==== 4. Coverage (does actual fall in P10–P90 interval?) ====
+            # ===== D. Coverage (P10–P90 interval) =====
             covered = ((targets >= q10) & (targets <= q90)).float()
-            coverage_50_90_hits += covered.sum().item()
+            coverage_hits += covered.sum().item()
             interval_count += targets.numel()
 
-            # ==== 5. Interval Width ====
+            # ===== E. Interval width =====
             interval_width_sum += (q90 - q10).sum().item()
 
-            # ---- DISPLAY ----
+            # ---- progress bar ----
             curr_rmse = (squared_err_sum / total_count) ** 0.5
             curr_mae  = abs_err_sum / total_count
-            
+
             pbar.set_description(
-                f"Val {batch_idx+1}/{len(loader)} | "
+                f"Val ({batch_idx+1}/{len(loader)}) | "
                 f"Loss: {eval_loss/(batch_idx+1):.3f} | "
                 f"RMSE: {curr_rmse:.3f} | MAE: {curr_mae:.3f}"
             )
 
-    # Final point metrics
+    # ---------- FINAL METRICS ----------
     avg_loss  = eval_loss / len(loader)
     final_rmse = (squared_err_sum / total_count) ** 0.5
     final_mae  = abs_err_sum / total_count
 
-    # Final distributional metrics
     final_crps = crps_sum / total_count
-    final_pinball10 = pinball_10 / total_count
-    final_pinball50 = pinball_50 / total_count
-    final_pinball90 = pinball_90 / total_count
-    final_coverage = coverage_50_90_hits / interval_count
+
+    final_pin_10 = pinball_10 / total_count
+    final_pin_50 = pinball_50 / total_count
+    final_pin_90 = pinball_90 / total_count
+
+    final_coverage = coverage_hits / interval_count
     final_interval_width = interval_width_sum / interval_count
 
+    # ---------- RETURN EVERYTHING ----------
     return {
-        # point metrics
+        # point forecasts
         "loss": avg_loss,
         "rmse": final_rmse,
         "mae": final_mae,
 
         # distributional metrics
         "crps": final_crps,
-        "pinball_10": final_pinball10,
-        "pinball_50": final_pinball50,
-        "pinball_90": final_pinball90,
+        "pinball_10": final_pin_10,
+        "pinball_50": final_pin_50,
+        "pinball_90": final_pin_90,
         "coverage_10_90": final_coverage,
         "interval_width_10_90": final_interval_width,
     }

@@ -124,6 +124,7 @@ class MixerModel(nn.Module):
         norm_epsilon: float = 1e-5,
         residual_in_fp32: bool = True,
         fused_add_norm: bool = True,
+        use_llm_init: bool = True,
         device=None,
         dtype=None,
     ):
@@ -167,14 +168,15 @@ class MixerModel(nn.Module):
             d_model, eps=norm_epsilon, **factory_kwargs
         )
 
-        self.apply(
-            partial(
-                _init_weights,
-                n_layer=n_layers,
-                **(initializer_cfg if initializer_cfg is not None else {}),
-                n_residuals_per_layer=1 if d_intermediate == 0 else 2,  # 2 if we have MLP
+        if use_llm_init:
+            self.apply(
+                partial(
+                    _init_weights,
+                    n_layer=n_layers,
+                    **(initializer_cfg if initializer_cfg is not None else {}),
+                    n_residuals_per_layer=1 if d_intermediate == 0 else 2,  # 2 if we have MLP
+                )
             )
-        )
 
     def forward(self, input_ids, inference_params=None, **mixer_kwargs):
         """
@@ -224,6 +226,7 @@ class MambaLMHeadModel(nn.Module, GenerationMixin):
         self,
         config: MambaConfig,
         initializer_cfg=None,
+        use_llm_init: bool = True,
         device=None,
         dtype=None,
     ) -> None:
@@ -256,18 +259,20 @@ class MambaLMHeadModel(nn.Module, GenerationMixin):
             initializer_cfg=initializer_cfg,
             fused_add_norm=fused_add_norm,
             residual_in_fp32=residual_in_fp32,
+            use_llm_init=use_llm_init, 
             **factory_kwargs,
         )
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
 
-        # Initialize weights and apply final processing
-        self.apply(
-            partial(
-                _init_weights,
-                n_layer=n_layer,
-                **(initializer_cfg if initializer_cfg is not None else {}),
+        if use_llm_init:
+            # Initialize weights and apply final processing
+            self.apply(
+                partial(
+                    _init_weights,
+                    n_layer=n_layer,
+                    **(initializer_cfg if initializer_cfg is not None else {}),
+                )
             )
-        )
         self.tie_weights()
 
     def tie_weights(self):

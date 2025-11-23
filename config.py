@@ -18,6 +18,7 @@ class Model:
     attn_cfg: dict
     vocab_size: int
     tie_embeddings: bool
+    use_llm_init: bool
 
 @dataclass
 class DatasetConfig:

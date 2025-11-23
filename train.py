@@ -171,6 +171,7 @@ def main(config: Config):
                 pad_vocab_size_multiple=8,
                 tie_embeddings=config.model.tie_embeddings,
             ),
+            use_llm_init = config.model.use_llm_init,
             dtype=torch.bfloat16,
             device=device,
         )

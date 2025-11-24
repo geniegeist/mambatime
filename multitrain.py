@@ -204,6 +204,15 @@ def main(config: Config):
 
     model = model.to(device)
 
+    # PRINT PARAM COUNT
+    num_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    if is_main:
+        print(f"Total parameters: {num_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+
+
     if dist.is_initialized():
         model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 

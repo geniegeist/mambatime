@@ -46,11 +46,19 @@ class Train:
     num_last_tokens: int
 
 @dataclass
+class Benchmark:
+    checkpoint: str
+    test_file: str
+    test_meta: str
+    time_zone: str
+
+@dataclass
 class Config:
     dataset: Dataset
     model: Model
     wandb: Wandb
     train: Train
+    benchmark: Benchmark
 
     device: str
     context_window_in_days: int

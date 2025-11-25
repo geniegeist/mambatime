@@ -29,7 +29,7 @@ def main(config: Config):
     test_dataset = TileTimeSeriesDataset(df_test, test_meta, context_length, use_features=config.model.model != "llm")
     test_loader = DataLoader(
         test_dataset,
-        batch_size=512,
+        batch_size=64,
         num_workers=config.num_workers,
         persistent_workers=True,
     )
@@ -96,7 +96,7 @@ def main(config: Config):
             t = target_timestamp[:,-1]
 
             preds.append(logits.cpu())
-            tile_ids.extend(tile_id.cpu().tolist())
+            tile_ids.extend(tile_id)
             ts.append(t)
 
     preds = torch.cat(preds, dim=0)

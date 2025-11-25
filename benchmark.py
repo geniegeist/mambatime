@@ -23,7 +23,7 @@ def main(config: Config):
     with open(config.benchmark.test_meta, "r") as f:
         test_meta = yaml.safe_load(f)
 
-    context_length = 60 // test_meta["time_res"] * 24 * config.context_window_in_days
+    context_length = 60 // test_meta["config"]["time_res"] * 24 * config.context_window_in_days
 
     df_test = pl.read_parquet(config.benchmark.test_file, memory_map=True)
     test_dataset = TileTimeSeriesDataset(df_test, test_meta, context_length, use_features=config.model.model != "llm")

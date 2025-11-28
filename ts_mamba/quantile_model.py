@@ -127,7 +127,7 @@ class MixerModel(nn.Module):
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
 
-        self.encoder = nn.Linear(d_input, d_model, **factory_kwargs)
+        self.encoder = nn.Linear(d_input, d_model).to(**factory_kwargs)
 
         
         # We change the order of residual and layer norm:
@@ -244,7 +244,7 @@ class MambaQuantileHeadModel(nn.Module, GenerationMixin):
             use_llm_init=use_llm_init, 
             **factory_kwargs,
         )
-        self.decoder = nn.Linear(d_model, len(quantiles), **factory_kwargs)
+        self.decoder = nn.Linear(d_model, len(quantiles)).to(**factory_kwargs)
 
         if use_llm_init:
             # Initialize weights and apply final processing

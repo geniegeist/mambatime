@@ -97,6 +97,7 @@ class Validate:
     type: str
     batch_size: int
     validate_every: int
+    eval_last_only: bool
 
     quantile_10_idx: int
     quantile_90_idx: int

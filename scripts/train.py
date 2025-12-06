@@ -242,6 +242,8 @@ def main(config: Config):
             model.eval()
 
             eval_kwargs = dict(model=model, criterion=criterion, loader=val_loader, device=device)
+            if config.validate.eval_last_only:
+                eval_kwargs["criterion"] = lambda p, t: criterion(p[:,-1], t[:,-1])
             if config.train.loss.name in ("l1", "mse"):
                 val_res = evaluate_point_forecast_model(**eval_kwargs)
             elif config.train.loss.name == "quantile":

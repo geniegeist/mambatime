@@ -235,6 +235,9 @@ def main(config: Config):
             batch = next(train_iter)
         return batch
 
+    if main_process:
+        wandb_run.watch(model.module if isinstance(model, DDP) else model, log="all")
+
     for step in pbar:
         last_step = step == config.train.num_iterations - 1
 

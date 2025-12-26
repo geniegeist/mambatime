@@ -430,6 +430,9 @@ class EmbeddingSequenceModel(SequenceModel):
         Returns:
             logits: (batch, seq, vocab_size)
         """
+        if tokens.dim() == 3:
+            tokens = tokens.squeeze(-1)
+
         hidden_states = self.backbone(tokens, inference_params=inference_params, **mixer_kwargs)
         if num_last_tokens > 0:
             hidden_states = hidden_states[:, -num_last_tokens:]

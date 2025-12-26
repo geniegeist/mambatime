@@ -194,18 +194,17 @@ def main(config: Config):
     # -----------------------------------------------------------------------------
     # Loop state
     ema_beta = 0.9 # EMA decay factor
-    if not resuming:
-        step = 0
-        best_step = 0
-        min_val_loss = float("inf")
-        smooth_train_loss = 0
-    else:
+    if resuming and config.load_optimizer:
         step = meta_data["step"]
         best_step = meta_data["best_step"]
         loop_state = meta_data["loop_state"]
         min_val_loss = loop_state["min_val_loss"]
         smooth_train_loss = loop_state["smooth_train_loss"]
-
+    else:
+        step = 0
+        best_step = 0
+        min_val_loss = float("inf")
+        smooth_train_loss = 0
 
     # -----------------------------------------------------------------------------
     # Loss

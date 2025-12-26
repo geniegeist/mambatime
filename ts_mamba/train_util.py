@@ -82,7 +82,7 @@ def plot_llm2(model, loader, device, wandb_run, epoch):
             obs = obs.squeeze(-1).to(device)
             
             # Get Logits
-            logits = model(obs, num_last_tokens=1).logits.squeeze(1) # (batch, vocab)
+            logits = model(obs, num_last_tokens=1).squeeze(1) # (batch, vocab)
             
             # 1. Convert logits to probabilities
             probs = F.softmax(logits, dim=-1) # (batch, vocab)

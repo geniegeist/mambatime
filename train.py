@@ -352,7 +352,7 @@ def main(config: Config):
 
                 preds = model(obs)
                 if config.train.loss.name == "cross_entropy":
-                    preds = preds.logits.reshape(-1, preds.logits.size(-1))
+                    preds = preds.reshape(-1, preds.size(-1))
                     targets = targets.reshape(-1)
 
                 loss = criterion(preds, targets)

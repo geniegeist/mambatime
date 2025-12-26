@@ -10,10 +10,6 @@ wandb:
   mode: online # choices=["online", "offline", "disabled"]
   id: null # pass correct id to resume experiment
 
-# checkpoint
-load_optimizer: True
-save_every: 1000
-
 validate:
   validate_every: 500
   batch_size: 256
@@ -21,6 +17,11 @@ validate:
 sample:
   sample_every: 1000
   batch_size: 256
+
+resume_from_step: ~
+checkpoint_dir: ~
+load_optimizer: True
+save_every: 10000
 
 num_workers: 1
 device: cuda

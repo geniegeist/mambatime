@@ -246,14 +246,16 @@ def main(config: Config):
             model.eval()
 
             eval_kwargs = dict(model=model, criterion=criterion, loader=val_loader, device=device)
-            if config.validate.eval_last_only:
-                eval_kwargs["criterion"] = lambda p, t: criterion(p[:,-1], t[:,-1])
             if config.train.loss.name in ("l1", "mse"):
+                if config.validate.eval_last_only:
+                    eval_kwargs["criterion"] = lambda p, t: criterion(p[:,-1], t[:,-1])
                 val_res = evaluate_point_forecast_model(**eval_kwargs)
             elif config.train.loss.name == "quantile":
+                if config.validate.eval_last_only:
+                    eval_kwargs["criterion"] = lambda p, t: criterion(p[:,-1], t[:,-1])
                 val_res = evaluate_quantile_model(**eval_kwargs, quantile_idx=config.validate.quantile_point_forecast_idx)
             elif config.train.loss.name == "cross_entropy":
-                val_res = evaluate_token_model(**eval_kwargs)
+                val_res = evaluate_token_model(**eval_kwargs, eval_last_only=config.validate.eval_last_only)
             else:
                 raise ValueError(f"Invalid config.train.loss.name {config.train.loss.name}")
 
